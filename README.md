@@ -259,3 +259,17 @@ Third-party attributions are documented in [NOTICE](./NOTICE).
 <p align="center">
   Made by <a href="https://evolutionfoundation.com.br">Evolution Foundation</a> · © 2026
 </p>
+
+## Geolocation webhook
+
+WhatsMeow location messages are forwarded directly to the dedicated TypeScript geolocation service when `GEOLOCATION_WEBHOOK_URL` is configured. The bridge handles both regular locations and WhatsApp live locations.
+
+Configure in the project's `.env`:
+
+```env
+GEOLOCATION_WEBHOOK_URL=http://localhost:8080/webhooks/whatsmeow/geolocation
+GEOLOCATION_WEBHOOK_SECRET=change-me
+```
+
+The URL must be reachable from the WhatsMeow process. The secret is sent as the `X-Webhook-Secret` header and must match the TypeScript webhook's `WEBHOOK_SECRET`.
+
