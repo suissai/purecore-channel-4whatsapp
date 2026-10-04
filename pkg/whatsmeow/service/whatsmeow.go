@@ -1238,6 +1238,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 		parsedMessageType := utils.GetMessageType(evt.Message)
 		if parsedMessageType == "ignore" || strings.HasPrefix(parsedMessageType, "unknown_protocol_") {
+		mycli.dispatchGeolocationWebhook(evt, mycli.userID)
+
 			mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Message ignored because it's a unknown protocol message", mycli.userID)
 			return
 		}
