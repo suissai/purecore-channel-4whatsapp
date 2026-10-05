@@ -166,7 +166,7 @@ func (mycli *MyClient) dispatchGeolocationWebhook(evt *events.Message, instanceI
 			if reqErr == nil {
 				req.Header.Set("Content-Type", "application/json")
 				if mycli.config.GeolocationWebhookSecret != "" {
-					req.Header.Set("X-Webhook-Secret", w.config.GeolocationWebhookSecret)
+					req.Header.Set("X-Webhook-Secret", mycli.config.GeolocationWebhookSecret)
 				}
 
 				resp, doErr := client.Do(req)
@@ -175,7 +175,7 @@ func (mycli *MyClient) dispatchGeolocationWebhook(evt *events.Message, instanceI
 					cancel()
 
 					if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
-						w.loggerWrapper.GetLogger(instanceID).LogInfo(
+						mycli.loggerWrapper.GetLogger(instanceID).LogInfo(
 							"[%s] Geolocation webhook delivered: event=%s messageId=%s status=%d",
 							instanceID, payload.Event, payload.MessageID, resp.StatusCode,
 						)
@@ -192,7 +192,7 @@ func (mycli *MyClient) dispatchGeolocationWebhook(evt *events.Message, instanceI
 			if attempt < attempts {
 				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
 			} else {
-				w.loggerWrapper.GetLogger(instanceID).LogError(
+				mycli.loggerWrapper.GetLogger(instanceID).LogError(
 					"[%s] Failed to deliver geolocation webhook after %d attempts: %v",
 					instanceID, attempts, reqErr,
 				)
