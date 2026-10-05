@@ -273,3 +273,6 @@ GEOLOCATION_WEBHOOK_SECRET=change-me
 
 The URL must be reachable from the WhatsMeow process. The secret is sent as the `X-Webhook-Secret` header and must match the TypeScript webhook's `WEBHOOK_SECRET`.
 
+
+
+<!-- CI lifecycle smoke-test -->
