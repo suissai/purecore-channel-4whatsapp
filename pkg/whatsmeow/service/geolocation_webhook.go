@@ -22,48 +22,36 @@ type geolocationWebhookPayload struct {
 	LiveLocation map[string]interface{} `json:"liveLocation,omitempty"`
 }
 
-func protoField(msg protoreflect.Message, names ...string) (protoreflect.Value, bool) {
+func protoField(msg protoreflect.Message, names ...string) (protoreflect.Value, protoreflect.FieldDescriptor, bool) {
 	for _, name := range names {
 		fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
 		if fd != nil {
-			return msg.Get(fd), msg.Has(fd)
+			return msg.Get(fd), fd, true
 		}
 	}
-	return protoreflect.Value{}, false
+	return protoreflect.Value{}, nil, false
 }
 
 func protoString(msg protoreflect.Message, names ...string) (string, bool) {
-	v, ok := protoField(msg, names...)
-	if !ok || v.Kind() != protoreflect.StringKind {
+	v, fd, ok := protoField(msg, names...)
+	if !ok || fd.Kind() != protoreflect.StringKind {
 		return "", false
 	}
 	return v.String(), true
 }
 
 func protoBool(msg protoreflect.Message, names ...string) bool {
-	v, ok := protoField(msg, names...)
-	return ok && v.Kind() == protoreflect.BoolKind && v.Bool()
+	v, fd, ok := protoField(msg, names...)
+	return ok && fd.Kind() == protoreflect.BoolKind && v.Bool()
 }
 
 func protoNumber(msg protoreflect.Message, names ...string) (float64, bool) {
-	v, exists := protoField(msg, names...)
-	if !exists {
-		// Coordinates are non-optional proto scalars, so Has() is false when zero.
-		for _, name := range names {
-			fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
-			if fd == nil {
-				continue
-			}
-			v = msg.Get(fd)
-			exists = true
-			break
-		}
-	}
+	v, fd, exists := protoField(msg, names...)
 	if !exists {
 		return 0, false
 	}
 
-	switch v.Kind() {
+	switch fd.Kind() {
 	case protoreflect.FloatKind, protoreflect.DoubleKind:
 		return v.Float(), true
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind,
@@ -152,8 +140,8 @@ func extractGeolocation(evt *events.Message) (*geolocationWebhookPayload, bool) 
 	return payload, true
 }
 
-func (w *whatsmeowService) dispatchGeolocationWebhook(evt *events.Message, instanceID string) {
-	if w.config == nil || w.config.GeolocationWebhookURL == "" {
+func (mycli *MyClient) dispatchGeolocationWebhook(evt *events.Message, instanceID string) {
+	if mycli == nil || mycli.config == nil || mycli.config.GeolocationWebhookURL == "" {
 		return
 	}
 
@@ -164,7 +152,7 @@ func (w *whatsmeowService) dispatchGeolocationWebhook(evt *events.Message, insta
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		w.loggerWrapper.GetLogger(instanceID).LogError("[%s] Failed to marshal geolocation webhook payload: %v", instanceID, err)
+		mycli.loggerWrapper.GetLogger(instanceID).LogError("[%s] Failed to marshal geolocation webhook payload: %v", instanceID, err)
 		return
 	}
 
@@ -174,10 +162,10 @@ func (w *whatsmeowService) dispatchGeolocationWebhook(evt *events.Message, insta
 
 		for attempt := 1; attempt <= attempts; attempt++ {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, w.config.GeolocationWebhookURL, bytes.NewReader(body))
+			req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, mycli.config.GeolocationWebhookURL, bytes.NewReader(body))
 			if reqErr == nil {
 				req.Header.Set("Content-Type", "application/json")
-				if w.config.GeolocationWebhookSecret != "" {
+				if mycli.config.GeolocationWebhookSecret != "" {
 					req.Header.Set("X-Webhook-Secret", w.config.GeolocationWebhookSecret)
 				}
 
