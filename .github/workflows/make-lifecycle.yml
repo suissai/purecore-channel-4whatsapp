@@ -1,0 +1,108 @@
+name: Validate Makefile lifecycle
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  make-lifecycle:
+    name: make setup -> make build -> make dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+          cache: true
+
+      - name: Install Swagger CLI
+        run: go install github.com/swaggo/swag/cmd/swag@v1.16.3
+
+      - name: Configure CI environment
+        run: |
+          cat > .env <<'EOF'
+          SERVER_PORT=8080
+          POSTGRES_AUTH_DB=postgresql://postgres:root@localhost:5432/evogo_auth?sslmode=disable
+          POSTGRES_USERS_DB=postgresql://postgres:root@localhost:5432/evogo_users?sslmode=disable
+          DATABASE_SAVE_MESSAGES=false
+          CLIENT_NAME=evolution
+          GLOBAL_API_KEY=ci-test-api-key
+          WADEBUG=DEBUG
+          LOGTYPE=console
+          WEBHOOK_FILES=true
+          CONNECT_ON_STARTUP=false
+          OS_NAME=Evolution GO CI
+          AMQP_URL=
+          AMQP_GLOBAL_ENABLED=false
+          WEBHOOK_URL=
+          GEOLOCATION_WEBHOOK_URL=
+          GEOLOCATION_WEBHOOK_SECRET=
+          MINIO_ENABLED=false
+          EOF
+
+      - name: make setup
+        run: make setup
+
+      - name: make build
+        run: make build
+
+      - name: make dev
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LOG_FILE="$RUNNER_TEMP/evolution-go.log"
+          make dev >"$LOG_FILE" 2>&1 &
+          APP_PID=$!
+
+          cleanup() {
+            if kill -0 "$APP_PID" 2>/dev/null; then
+              kill -TERM "$APP_PID" 2>/dev/null || true
+              wait "$APP_PID" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+
+          echo "Waiting for Evolution GO to become ready..."
+          for i in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8080/server/ok >/dev/null; then
+              echo "Evolution GO started successfully."
+              break
+            fi
+
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Evolution GO exited before becoming ready."
+              cat "$LOG_FILE"
+              exit 1
+            fi
+
+            sleep 2
+
+            if [ "$i" -eq 30 ]; then
+              echo "Evolution GO did not become ready within 60 seconds."
+              cat "$LOG_FILE"
+              exit 1
+            fi
+          done
+
+          cat "$LOG_FILE"
